@@ -1,0 +1,632 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Gamify — XP, Coins & Rewards (Fixed)</title>
+
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+
+  <style>
+    body { background:#071029; color:#e6eef8; min-height:100vh; }
+    .card { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); }
+    .progress-bar { background:linear-gradient(90deg,#22c55e,#84cc16); }
+    .banner { height:120px; object-fit:cover; width:100%; border-radius:6px; display:block; }
+    .badge-list{display:flex;gap:6px;flex-wrap:wrap}
+    .avatar{width:70px;height:70px;border-radius:10px;object-fit:cover}
+    .btn-disabled { opacity: .6; pointer-events: none; }
+  </style>
+</head>
+<body>
+<div class="container py-4">
+
+  <!-- HEADER -->
+  <div class="d-flex justify-content-between align-items-start">
+    <h1 class="h4 mb-0">Gamify XP Edition ⚔️</h1>
+    <div class="text-end small-muted small">
+      XP: <span id="ui-xp" class="text-info fw-bold">0</span> •
+      Coins: <span id="ui-coins" class="text-warning fw-bold">0</span> •
+      Level: <span id="ui-level" class="fw-bold">1</span>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-2">
+
+    <!-- PROFILE -->
+    <div class="col-lg-4">
+      <div class="card p-3">
+
+        <img id="bannerImg" class="banner mb-2" src="" alt="Banner" />
+
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <img id="avatarImg" class="avatar bg-secondary" src="" alt="Avatar" />
+          <div class="flex-grow-1">
+            <div id="ui-name" class="fw-bold">Player</div>
+            <div id="ui-bio" class="small text-muted">Let’s level up</div>
+          </div>
+        </div>
+
+        <label class="small">Name</label>
+        <input id="inputName" class="form-control form-control-sm mb-2" />
+
+        <label class="small">Bio</label>
+        <textarea id="inputBio" class="form-control form-control-sm mb-2"></textarea>
+
+        <div class="d-flex gap-2">
+          <button id="btnSaveProfile" class="btn btn-success btn-sm">Save</button>
+          <button id="btnSetAvatar" class="btn btn-outline-light btn-sm">Set Avatar</button>
+          <button id="btnSetBanner" class="btn btn-outline-light btn-sm">Set Banner</button>
+        </div>
+
+        <input id="fileAvatar" type="file" accept="image/*" class="d-none">
+        <input id="fileBanner" type="file" accept="image/*" class="d-none">
+
+        <hr class="my-3">
+
+        <div class="small text-muted">Badges</div>
+        <div id="badgeContainer" class="badge-list mt-1"></div>
+
+      </div>
+    </div>
+
+    <!-- TASKS + REWARDS -->
+    <div class="col-lg-8">
+
+      <!-- NEW TASK -->
+      <div class="card p-3 mb-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Create Task</h5>
+          <div class="small text-muted">Finish to earn XP & coins</div>
+        </div>
+
+        <div class="row g-2 mt-2">
+          <div class="col-md-5">
+            <input id="taskTitle" class="form-control form-control-sm" placeholder="Task title (e.g., Study JS)" />
+          </div>
+          <div class="col-md-2">
+            <input id="taskMins" type="number" value="25" min="1" class="form-control form-control-sm" />
+          </div>
+          <div class="col-md-2">
+            <input id="taskXP" type="number" value="20" min="1" class="form-control form-control-sm" />
+          </div>
+          <div class="col-md-3 d-grid">
+            <button id="btnCreateTask" class="btn btn-success btn-sm">Add Task</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACTIVE TASKS -->
+      <div class="card p-3 mb-3">
+        <h6 class="mb-2">Active Tasks</h6>
+        <div id="tasksList"></div>
+        <div id="noTasks" class="text-muted small mt-2">No tasks yet</div>
+      </div>
+
+      <!-- REWARD SHOP -->
+      <div class="card p-3">
+        <h6>Reward Shop (Customizable)</h6>
+
+        <div id="rewardsList" class="mt-2"></div>
+
+        <hr>
+
+        <!-- CREATE CUSTOM REWARD -->
+        <div class="row g-2 align-items-center">
+          <div class="col-md-7">
+            <input id="rewardTitle" class="form-control form-control-sm" placeholder="Reward name (e.g., Coffee Break)" />
+          </div>
+          <div class="col-md-3">
+            <input id="rewardCost" type="number" class="form-control form-control-sm" placeholder="Cost in coins" />
+          </div>
+          <div class="col-md-2 d-grid">
+            <button id="btnAddReward" class="btn btn-primary btn-sm">Add Reward</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+/* =========================
+   GAMIFY — corrected single-file app
+   - XP curve: Level2 = 100 XP, each level needs +50 XP
+   - Tasks: start / pause / finish / delete
+   - Timers continue correctly after tab closed (uses timestamps)
+   - Coins awarded when finishing tasks
+   - Rewards customizable and claimable with coins
+   - Data persisted in localStorage
+   ========================= */
+
+/* ===== STORAGE KEYS ===== */
+const LS = {
+  profile: "gf_profile_v2",
+  tasks: "gf_tasks_v2",
+  xp: "gf_xp_v2",
+  coins: "gf_coins_v2",
+  rewards: "gf_rewards_v2"
+};
+
+/* ===== DEFAULTS ===== */
+const defaultProfile = { name: "Player", bio: "Let's level up", avatar: "", banner: "", badges: [] };
+const defaultRewards = [
+  { id: "coffee", title: "Coffee Break", cost: 5, desc: "10 min break" },
+  { id: "game", title: "Game Time", cost: 20, desc: "20 min play" },
+  { id: "treat", title: "Treat Yourself", cost: 50, desc: "Small treat" }
+];
+
+/* ===== LOAD/INIT STATE ===== */
+function loadJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+function saveJSON(key, obj) {
+  localStorage.setItem(key, JSON.stringify(obj));
+}
+
+let profile = loadJSON(LS.profile, defaultProfile);
+let tasks = loadJSON(LS.tasks, []); // each: {id,title,mins,xp,remaining,status,startTime}
+let xp = Number(loadJSON(LS.xp, 0) || 0);
+let coins = Number(loadJSON(LS.coins, 0) || 0);
+let rewards = loadJSON(LS.rewards, defaultRewards);
+
+/* ===== XP / LEVEL LOGIC =====
+   Level 1 = starting. Level 2 requires 100 XP.
+   Each subsequent level requires +50 XP more than previous level.
+   Example thresholds: L2=100, L3=150, L4=200, L5=250...
+*/
+function xpNeededForLevel(level) {
+  if (level <= 1) return 0;
+  return 100 + (level - 2) * 50;
+}
+function currentLevelFromXP(currentXP) {
+  let lvl = 1;
+  // increment while we meet requirement for next level
+  while (currentXP >= xpNeededForLevel(lvl + 1)) lvl++;
+  return lvl;
+}
+
+/* ===== UI ELEMENTS ===== */
+const ui = {
+  uiXP: document.getElementById("ui-xp"),
+  uiCoins: document.getElementById("ui-coins"),
+  uiLevel: document.getElementById("ui-level"),
+  uiName: document.getElementById("ui-name"),
+  uiBio: document.getElementById("ui-bio"),
+  avatarImg: document.getElementById("avatarImg"),
+  bannerImg: document.getElementById("bannerImg"),
+  badgeContainer: document.getElementById("badgeContainer"),
+  tasksList: document.getElementById("tasksList"),
+  noTasks: document.getElementById("noTasks"),
+  rewardsList: document.getElementById("rewardsList")
+};
+
+/* ===== HELPERS ===== */
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+function clamp(v, a = 0, b = 100) { return Math.max(a, Math.min(b, v)); }
+function secToMMSS(s) {
+  s = Math.max(0, Math.floor(s));
+  const m = String(Math.floor(s / 60)).padStart(2, "0");
+  const sec = String(s % 60).padStart(2, "0");
+  return `${m}:${sec}`;
+}
+function addBadge(badgeTitle) {
+  profile.badges = profile.badges || [];
+  if (!profile.badges.includes(badgeTitle)) {
+    profile.badges.push(badgeTitle);
+    saveJSON(LS.profile, profile);
+  }
+}
+
+/* ===== RENDER ===== */
+function renderProfile() {
+  ui.uiName.textContent = profile.name || "Player";
+  ui.uiBio.textContent = profile.bio || "";
+  ui.avatarImg.src = profile.avatar || emptyAvatarSVG(profile.name || "P");
+  if (profile.banner) ui.bannerImg.src = profile.banner;
+  else ui.bannerImg.src = emptyBannerDataURL();
+  // badges
+  ui.badgeContainer.innerHTML = "";
+  if (profile.badges && profile.badges.length) {
+    profile.badges.forEach(b => {
+      const sp = document.createElement("span");
+      sp.className = "badge bg-warning text-dark";
+      sp.textContent = b;
+      ui.badgeContainer.appendChild(sp);
+    });
+  } else {
+    ui.badgeContainer.innerHTML = '<div class="small text-muted">No badges yet</div>';
+  }
+}
+
+function renderStats() {
+  ui.uiXP.textContent = xp;
+  ui.uiCoins.textContent = coins;
+  ui.uiLevel.textContent = currentLevelFromXP(xp);
+}
+
+function renderTasks() {
+  ui.tasksList.innerHTML = "";
+  if (!tasks.length) {
+    ui.noTasks.style.display = "block";
+    return;
+  }
+  ui.noTasks.style.display = "none";
+
+  tasks.forEach(t => {
+    const totalSeconds = Math.max(1, t.mins * 60);
+    const percent = clamp((1 - (t.remaining / totalSeconds)) * 100, 0, 100);
+    const row = document.createElement("div");
+    row.className = "p-2 border rounded mb-2";
+    row.innerHTML = `
+      <div class="d-flex justify-content-between">
+        <div>
+          <div class="fw-bold">${escapeHtml(t.title)}</div>
+          <div class="small text-muted">${t.mins} min • ${t.xp} XP</div>
+        </div>
+        <div class="small text-muted">${escapeHtml(t.status)}</div>
+      </div>
+
+      <div class="progress mt-2" style="height:8px;">
+        <div class="progress-bar" role="progressbar" style="width:${percent}%;"></div>
+      </div>
+
+      <div class="d-flex justify-content-between mt-2 small align-items-center">
+        <div>${secToMMSS(t.remaining)}</div>
+        <div>
+          <button class="btn btn-sm btn-success me-1 start-btn">▶</button>
+          <button class="btn btn-sm btn-warning me-1 pause-btn">⏸</button>
+          <button class="btn btn-sm btn-primary me-1 finish-btn">✓</button>
+          <button class="btn btn-sm btn-danger delete-btn">🗑</button>
+        </div>
+      </div>
+    `;
+
+    const startBtn = row.querySelector(".start-btn");
+    const pauseBtn = row.querySelector(".pause-btn");
+    const finishBtn = row.querySelector(".finish-btn");
+    const deleteBtn = row.querySelector(".delete-btn");
+
+    startBtn.onclick = () => startTask(t.id);
+    pauseBtn.onclick = () => pauseTask(t.id);
+    finishBtn.onclick = () => finishTask(t.id);
+    deleteBtn.onclick = () => deleteTask(t.id);
+
+    // disable buttons based on status
+    if (t.status === "running") {
+      startBtn.disabled = true; startBtn.classList.add("btn-disabled");
+      pauseBtn.disabled = false;
+      finishBtn.disabled = false;
+    } else if (t.status === "done") {
+      startBtn.disabled = true; pauseBtn.disabled = true; finishBtn.disabled = true;
+      row.style.opacity = "0.7";
+    } else {
+      startBtn.disabled = false; pauseBtn.disabled = true;
+    }
+
+    ui.tasksList.appendChild(row);
+  });
+}
+
+function renderRewards() {
+  ui.rewardsList.innerHTML = "";
+  if (!rewards || !rewards.length) {
+    ui.rewardsList.innerHTML = '<div class="small text-muted">No rewards configured.</div>';
+    return;
+  }
+  rewards.forEach(r => {
+    const box = document.createElement("div");
+    box.className = "p-2 border rounded mb-2 d-flex justify-content-between align-items-center";
+    box.innerHTML = `
+      <div>
+        <div class="fw-bold">${escapeHtml(r.title)}</div>
+        <div class="small text-muted">${r.cost} coins • ${escapeHtml(r.desc || "")}</div>
+      </div>
+      <div>
+        <button class="btn btn-sm btn-outline-light claim-btn">Claim</button>
+      </div>
+    `;
+    const btn = box.querySelector(".claim-btn");
+    btn.onclick = () => claimReward(r.id);
+    if (coins < r.cost) {
+      btn.disabled = true;
+      btn.classList.add("btn-disabled");
+    }
+    ui.rewardsList.appendChild(box);
+  });
+}
+
+/* ===== ESCAPE helper ===== */
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str).replace(/[&<>"']/g, m => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+}
+
+/* ===== EMPTY AVATAR/BANNER DATA URLs (simple) ===== */
+function emptyAvatarSVG(nameInitial) {
+  const ch = (nameInitial || "P").charAt(0).toUpperCase();
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><rect width='100%' height='100%' fill='#475569'/><text x='50%' y='55%' fill='#f8fafc' font-family='Arial' font-size='64' dominant-baseline='middle' text-anchor='middle'>${ch}</text></svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+function emptyBannerDataURL() {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='800' height='120'><defs><linearGradient id='g' x1='0' x2='1'><stop offset='0' stop-color='#7c3aed'/><stop offset='1' stop-color='#06b6d4'/></linearGradient></defs><rect width='100%' height='100%' fill='url(#g)'/><text x='50%' y='50%' fill='#071029' font-family='Arial' font-size='22' text-anchor='middle' dominant-baseline='middle'>Your Banner</text></svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
+/* ===== TASK OPERATIONS ===== */
+function createTaskFromInputs() {
+  const title = document.getElementById("taskTitle").value.trim();
+  const mins = Number(document.getElementById("taskMins").value || 0);
+  const rewardXP = Number(document.getElementById("taskXP").value || 0);
+  if (!title) return alert("Enter a task title.");
+  if (mins < 1) return alert("Minutes must be at least 1.");
+  if (rewardXP < 1) return alert("XP reward must be at least 1.");
+  const newTask = {
+    id: uid(),
+    title,
+    mins,
+    xp: rewardXP,
+    remaining: mins * 60,
+    status: "idle",
+    startTime: null
+  };
+  tasks.unshift(newTask);
+  saveJSON(LS.tasks, tasks);
+  renderTasks();
+  // clear title only
+  document.getElementById("taskTitle").value = "";
+}
+
+function startTask(id) {
+  tasks = tasks.map(t => {
+    if (t.id !== id) return t;
+    if (t.status === "done") return t;
+    // if paused, keep remaining; if idle, ensure remaining set
+    return { ...t, status: "running", startTime: Date.now() };
+  });
+  saveJSON(LS.tasks, tasks);
+  renderTasks();
+}
+
+function pauseTask(id) {
+  tasks = tasks.map(t => {
+    if (t.id !== id) return t;
+    if (t.status !== "running") return t;
+    const elapsed = Math.floor((Date.now() - (t.startTime || Date.now())) / 1000);
+    const remaining = Math.max(0, t.remaining - elapsed);
+    return { ...t, status: "paused", remaining, startTime: null };
+  });
+  saveJSON(LS.tasks, tasks);
+  renderTasks();
+}
+
+function finishTask(id) {
+  let taskFound = false;
+  tasks = tasks.map(t => {
+    if (t.id !== id) return t;
+    if (t.status === "done") return t;
+    taskFound = true;
+    // award xp and coins
+    xp += Number(t.xp || 0);
+    coins += Math.floor(Number(t.xp || 0) / 2);
+    addBadge("Task Master"); // example badge
+    return { ...t, remaining: 0, status: "done", startTime: null };
+  });
+  if (taskFound) {
+    persistAll();
+    renderStats();
+    renderProfile();
+    renderTasks();
+    renderRewards();
+  }
+}
+
+function deleteTask(id) {
+  if (!confirm("Delete this task?")) return;
+  tasks = tasks.filter(t => t.id !== id);
+  saveJSON(LS.tasks, tasks);
+  renderTasks();
+}
+
+/* ===== TIMER TICK (runs every 1s) =====
+   For running tasks compute elapsed based on stored startTime.
+   If a task reaches 0, mark done and award xp/coins only once.
+*/
+setInterval(() => {
+  const now = Date.now();
+  let anyChange = false;
+  const updated = tasks.map(t => {
+    if (t.status !== "running") return t;
+    const elapsed = Math.floor((now - (t.startTime || now)) / 1000);
+    const newRemaining = Math.max(0, t.remaining - elapsed);
+    if (newRemaining <= 0) {
+      // complete the task
+      xp += Number(t.xp || 0);
+      coins += Math.floor(Number(t.xp || 0) / 2);
+      addBadge("Grinder");
+      anyChange = true;
+      return { ...t, remaining: 0, status: "done", startTime: null };
+    } else {
+      anyChange = true;
+      // refresh startTime to now and set remaining so that if tab closes we can catch up
+      return { ...t, remaining: newRemaining, startTime: now };
+    }
+  });
+
+  if (anyChange) {
+    tasks = updated;
+    persistAll();
+    renderStats();
+    renderProfile();
+    renderTasks();
+    renderRewards();
+  } else {
+    // still update timers visually (no change persisted necessary)
+    // but rendering is cheap enough — update progress/time
+    renderTasks();
+  }
+}, 1000);
+
+/* ===== CATCH-UP ON LOAD (in case tasks were running while tab closed) ===== */
+function catchUpOnLoad() {
+  const now = Date.now();
+  let changed = false;
+  tasks = tasks.map(t => {
+    if (t.status !== "running") return t;
+    const elapsed = Math.floor((now - (t.startTime || now)) / 1000);
+    const newRemaining = Math.max(0, t.remaining - elapsed);
+    if (newRemaining <= 0) {
+      xp += Number(t.xp || 0);
+      coins += Math.floor(Number(t.xp || 0) / 2);
+      addBadge("Grinder");
+      changed = true;
+      return { ...t, remaining: 0, status: "done", startTime: null };
+    } else {
+      changed = true;
+      return { ...t, remaining: newRemaining, startTime: now };
+    }
+  });
+  if (changed) {
+    persistAll();
+  }
+}
+
+/* ===== REWARDS FUNCTIONS ===== */
+function renderRewardsUI() {
+  renderRewards();
+}
+function renderRewards() {
+  ui.rewardsList.innerHTML = "";
+  if (!rewards || rewards.length === 0) {
+    ui.rewardsList.innerHTML = '<div class="small text-muted">No rewards configured.</div>';
+    return;
+  }
+  rewards.forEach(r => {
+    const row = document.createElement("div");
+    row.className = "p-2 border rounded mb-2 d-flex justify-content-between align-items-center";
+    row.innerHTML = `
+      <div>
+        <div class="fw-bold">${escapeHtml(r.title)}</div>
+        <div class="small text-muted">${r.cost} coins</div>
+      </div>
+      <div>
+        <button class="btn btn-sm btn-light claim-btn">Claim</button>
+      </div>
+    `;
+    const btn = row.querySelector(".claim-btn");
+    btn.onclick = () => claimReward(r.id);
+    if (coins < r.cost) { btn.disabled = true; btn.classList.add("btn-disabled"); }
+    ui.rewardsList.appendChild(row);
+  });
+}
+
+function addRewardFromInputs() {
+  const title = (document.getElementById("rewardTitle").value || "").trim();
+  const cost = Number(document.getElementById("rewardCost").value || 0);
+  if (!title) return alert("Enter reward title.");
+  if (cost < 1) return alert("Reward cost must be at least 1 coin.");
+  rewards.push({ id: uid(), title, cost, desc: "" });
+  saveJSON(LS.rewards, rewards);
+  document.getElementById("rewardTitle").value = "";
+  document.getElementById("rewardCost").value = "";
+  renderRewards();
+}
+
+function claimReward(id) {
+  const r = rewards.find(x => x.id === id);
+  if (!r) return;
+  if (coins < r.cost) { alert("Not enough coins."); return; }
+  if (!confirm(`Spend ${r.cost} coins for "${r.title}"?`)) return;
+  coins -= r.cost;
+  addBadge(r.title + " Badge");
+  persistAll();
+  renderStats();
+  renderProfile();
+  renderRewards();
+  alert("Reward claimed!");
+}
+
+/* ===== PERSIST ALL ===== */
+function persistAll() {
+  saveJSON(LS.tasks, tasks);
+  saveJSON(LS.profile, profile);
+  saveJSON(LS.xp, xp);
+  saveJSON(LS.coins, coins);
+  saveJSON(LS.rewards, rewards);
+}
+
+/* ===== SIMPLE UI HOOKS ===== */
+document.getElementById("btnCreateTask").onclick = createTaskFromInputs;
+document.getElementById("btnAddReward").onclick = addRewardFromInputs;
+
+document.getElementById("btnSaveProfile").onclick = () => {
+  profile.name = (document.getElementById("inputName").value || "").trim() || profile.name;
+  profile.bio = (document.getElementById("inputBio").value || "").trim() || profile.bio;
+  saveJSON(LS.profile, profile);
+  renderProfile();
+  alert("Profile saved.");
+};
+
+/* AVATAR / BANNER upload */
+document.getElementById("btnSetAvatar").onclick = () => document.getElementById("fileAvatar").click();
+document.getElementById("btnSetBanner").onclick = () => document.getElementById("fileBanner").click();
+
+document.getElementById("fileAvatar").onchange = e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    profile.avatar = ev.target.result;
+    saveJSON(LS.profile, profile);
+    renderProfile();
+  };
+  reader.readAsDataURL(f);
+};
+
+document.getElementById("fileBanner").onchange = e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    profile.banner = ev.target.result;
+    saveJSON(LS.profile, profile);
+    renderProfile();
+  };
+  reader.readAsDataURL(f);
+};
+
+/* ===== ON LOAD ===== */
+function init() {
+  // ensure rewards exists
+  if (!rewards || !rewards.length) {
+    rewards = defaultRewards.slice();
+    saveJSON(LS.rewards, rewards);
+  }
+  // populate profile input fields if present
+  document.getElementById("inputName").value = profile.name || "";
+  document.getElementById("inputBio").value = profile.bio || "";
+
+  catchUpOnLoad();
+  renderProfile();
+  renderStats();
+  renderTasks();
+  renderRewardsUI();
+
+  // autosave periodically (safety)
+  setInterval(persistAll, 5000);
+}
+
+init();
+
+</script>
+</body>
+</html>
